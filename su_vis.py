@@ -109,7 +109,7 @@ class ClassDataset(Dataset):
     def __len__(self):
         return len(self.imgs_files)
         
-KEYPOINTS_FOLDER_TRAIN = '/home/ysu/keypoint_rcnn_training_pytorch-main/glue_tubes_keypoints_dataset_134imgs/train'
+KEYPOINTS_FOLDER_TRAIN = '/home/ysu/keypoint_rcnn_training_pytorch-main/mis/train'
 dataset = ClassDataset(KEYPOINTS_FOLDER_TRAIN, transform=train_transform(), demo=True)
 data_loader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=collate_fn)
 
@@ -183,7 +183,7 @@ def get_model(num_keypoints, weights_path=None):
                                                                    rpn_anchor_generator=anchor_generator)
 
     if weights_path:
-        state_dict = torch.load(weights_path)
+        state_dict = torch.load('/home/ysu/keypoint_rcnn_training_pytorch-main/mis.pth')
         model.load_state_dict(state_dict)        
         
     return model
@@ -191,8 +191,8 @@ def get_model(num_keypoints, weights_path=None):
 #device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')    
 device = torch.device('cpu')
 
-KEYPOINTS_FOLDER_TRAIN = '/home/ysu/keypoint_rcnn_training_pytorch-main/glue_tubes_keypoints_dataset_134imgs/train'
-KEYPOINTS_FOLDER_TEST = '/home/ysu/keypoint_rcnn_training_pytorch-main/glue_tubes_keypoints_dataset_134imgs/test'
+KEYPOINTS_FOLDER_TRAIN = '/home/ysu/keypoint_rcnn_training_pytorch-main/mis/train'
+KEYPOINTS_FOLDER_TEST = '/home/ysu/keypoint_rcnn_training_pytorch-main/mis/test'
 
 dataset_train = ClassDataset(KEYPOINTS_FOLDER_TRAIN, transform=train_transform(), demo=False)
 dataset_test = ClassDataset(KEYPOINTS_FOLDER_TEST, transform=None, demo=False)

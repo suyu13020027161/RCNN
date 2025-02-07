@@ -1,3 +1,4 @@
+#苏雨的RCNN网络预测显示程序
 import os, json, cv2, numpy as np, matplotlib.pyplot as plt
 
 import torch
@@ -12,6 +13,13 @@ import albumentations as A # Library for augmentations
 import transforms, utils, engine, train
 from utils import collate_fn
 from engine import train_one_epoch, evaluate
+
+
+import torchvision.transforms as transforms
+from PIL import Image
+import matplotlib.pyplot as plt
+
+
 
 def train_transform():
     return A.Compose([
@@ -48,23 +56,13 @@ class ClassDataset(Dataset):
             bboxes_labels_original = ['Glue tube' for _ in bboxes_original]            
 
         if self.transform:   
-            # Converting keypoints from [x,y,visibility]-format to [x, y]-format + Flattening nested list of keypoints            
-            # For example, if we have the following list of keypoints for three objects (each object has two keypoints):
-            # [[obj1_kp1, obj1_kp2], [obj2_kp1, obj2_kp2], [obj3_kp1, obj3_kp2]], where each keypoint is in [x, y]-format            
-            # Then we need to convert it to the following list:
-            # [obj1_kp1, obj1_kp2, obj2_kp1, obj2_kp2, obj3_kp1, obj3_kp2]
             keypoints_original_flattened = [el[0:2] for kp in keypoints_original for el in kp]
             
             # Apply augmentations
             transformed = self.transform(image=img_original, bboxes=bboxes_original, bboxes_labels=bboxes_labels_original, keypoints=keypoints_original_flattened)
             img = transformed['image']
             bboxes = transformed['bboxes']
-            
-            # Unflattening list transformed['keypoints']
-            # For example, if we have the following list of keypoints for three objects (each object has two keypoints):
-            # [obj1_kp1, obj1_kp2, obj2_kp1, obj2_kp2, obj3_kp1, obj3_kp2], where each keypoint is in [x, y]-format
-            # Then we need to convert it to the following list:
-            # [[obj1_kp1, obj1_kp2], [obj2_kp1, obj2_kp2], [obj3_kp1, obj3_kp2]]
+
             keypoints_transformed_unflattened = np.reshape(np.array(transformed['keypoints']), (-1,2,2)).tolist()
 
             # Converting transformed keypoints from [x, y]-format to [x,y,visibility]-format by appending original visibilities to transformed coordinates of keypoints
@@ -116,46 +114,50 @@ data_loader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=collate
 iterator = iter(data_loader)
 batch = next(iterator)
 
-print("Original targets:\n", batch[3], "\n\n")
-print("Transformed targets:\n", batch[1])
+#print("Original targets:\n", batch[3], "\n\n")
+#print("Transformed targets:\n", batch[1])
 
-keypoints_classes_ids2names = {0: 'Head', 1: 'Tail'}
+keypoints_classes_ids2names = {0: 'Root', 1: 'Head'}
+
+
+
+
+
+
 
 def visualize(image, bboxes, keypoints, image_original=None, bboxes_original=None, keypoints_original=None):
     fontsize = 18
-
-    for bbox in bboxes:
-        start_point = (bbox[0], bbox[1])
-        end_point = (bbox[2], bbox[3])
-        image = cv2.rectangle(image.copy(), start_point, end_point, (0,255,0), 2)
     
+    '''
     for kps in keypoints:
         for idx, kp in enumerate(kps):
             image = cv2.circle(image.copy(), tuple(kp), 5, (255,0,0), 10)
             image = cv2.putText(image.copy(), " " + keypoints_classes_ids2names[idx], tuple(kp), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 3, cv2.LINE_AA)
 
+    '''
+    
     if image_original is None and keypoints_original is None:
-        plt.figure(figsize=(40,40))
-        plt.imshow(image)
+        for kps in keypoints:
+            for idx, kp in enumerate(kps): 
+                if keypoints_classes_ids2names[idx] == 'Root':
+                    image = cv2.circle(image.copy(), tuple(kp), 2, (255,0,0), 5)                
+                else:
+                    image = cv2.circle(image.copy(), tuple(kp), 2, (0,255,0), 5)
+            image = cv2.line(image.copy(), tuple(kps[0]), tuple(kps[1]), (255, 128, 0), 4)  # 橙色线条
 
-    else:
-        for bbox in bboxes_original:
-            start_point = (bbox[0], bbox[1])
-            end_point = (bbox[2], bbox[3])
-            image_original = cv2.rectangle(image_original.copy(), start_point, end_point, (0,255,0), 2)
+        plt.imshow(image) 
         
+    else:        
         for kps in keypoints_original:
-            for idx, kp in enumerate(kps):
-                image_original = cv2.circle(image_original, tuple(kp), 5, (255,0,0), 10)
-                image_original = cv2.putText(image_original, " " + keypoints_classes_ids2names[idx], tuple(kp), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 3, cv2.LINE_AA)
+            for idx, kp in enumerate(kps): 
+                if keypoints_classes_ids2names[idx] == 'Root':
+                    image_original = cv2.circle(image_original.copy(), tuple(kp), 2, (255,0,0), 5)                
+                else:
+                    image_original = cv2.circle(image_original.copy(), tuple(kp), 2, (0,255,0), 5)
+            image_original = cv2.line(image_original.copy(), tuple(kps[0]), tuple(kps[1]), (255, 128, 0), 4)  # 橙色线条
 
-        f, ax = plt.subplots(1, 2, figsize=(40, 20))
+        plt.imshow(image_original)        
 
-        ax[0].imshow(image_original)
-        ax[0].set_title('Original image', fontsize=fontsize)
-
-        ax[1].imshow(image)
-        ax[1].set_title('Transformed image', fontsize=fontsize)
         
 image = (batch[0][0].permute(1,2,0).numpy() * 255).astype(np.uint8)
 bboxes = batch[1][0]['boxes'].detach().cpu().numpy().astype(np.int32).tolist()
@@ -171,9 +173,11 @@ keypoints_original = []
 for kps in batch[3][0]['keypoints'].detach().cpu().numpy().astype(np.int32).tolist():
     keypoints_original.append([kp[:2] for kp in kps])
 
-visualize(image, bboxes, keypoints, image_original, bboxes_original, keypoints_original)
 
-def get_model(num_keypoints, weights_path=None):
+print(image)
+#visualize(image, bboxes, keypoints, image_original, bboxes_original, keypoints_original)
+
+def get_model(num_keypoints, weights_path=True):
     
     anchor_generator = AnchorGenerator(sizes=(32, 64, 128, 256, 512), aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0))
     model = torchvision.models.detection.keypointrcnn_resnet50_fpn(pretrained=False,
@@ -183,7 +187,7 @@ def get_model(num_keypoints, weights_path=None):
                                                                    rpn_anchor_generator=anchor_generator)
 
     if weights_path:
-        state_dict = torch.load(weights_path)
+        state_dict = torch.load('/home/ysu/keypoint_rcnn_training_pytorch-main/mis.pth')
         model.load_state_dict(state_dict)        
         
     return model
@@ -191,13 +195,11 @@ def get_model(num_keypoints, weights_path=None):
 #device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')    
 device = torch.device('cpu')
 
-KEYPOINTS_FOLDER_TRAIN = '/home/ysu/keypoint_rcnn_training_pytorch-main/mis/train'
+
 KEYPOINTS_FOLDER_TEST = '/home/ysu/keypoint_rcnn_training_pytorch-main/mis/test'
 
-dataset_train = ClassDataset(KEYPOINTS_FOLDER_TRAIN, transform=train_transform(), demo=False)
-dataset_test = ClassDataset(KEYPOINTS_FOLDER_TEST, transform=None, demo=False)
 
-data_loader_train = DataLoader(dataset_train, batch_size=3, shuffle=True, collate_fn=collate_fn)
+dataset_test = ClassDataset(KEYPOINTS_FOLDER_TEST, transform=None, demo=False)
 data_loader_test = DataLoader(dataset_test, batch_size=1, shuffle=False, collate_fn=collate_fn)
 
 model = get_model(num_keypoints = 2)
@@ -206,13 +208,108 @@ model.to(device)
 params = [p for p in model.parameters() if p.requires_grad]
 optimizer = torch.optim.SGD(params, lr=0.001, momentum=0.9, weight_decay=0.0005)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.3)
-num_epochs = 100
 
-for epoch in range(num_epochs):
-    train_one_epoch(model, optimizer, data_loader_train, device, epoch, print_freq=1000)
-    lr_scheduler.step()
-    evaluate(model, data_loader_test, device)
+
+
+
+
+img_path = '/home/ysu/keypoint_rcnn_training_pytorch-main/glue_tubes_keypoints_dataset_134imgs/test/images/IMG_4913_JPG_jpg.rf.4f67c223e9cbf0ed07236bfe142aaaee.jpg'
+
+
+
+
+def load_transform_image(image_path):
+    """加载图片并转换为[C, H, W]格式的张量"""
+    # 使用PIL库加载图像
+    image = Image.open(image_path).convert('RGB')  # 确保图像为三通道RGB格式
     
-# Save model weights after training
-torch.save(model.state_dict(), '/home/ysu/keypoint_rcnn_training_pytorch-main/mis_100.pth')
-        
+    # 定义转换操作，将图像转换为Tensor并重新排列维度
+    transform = transforms.Compose([
+        transforms.ToTensor()  # 将PIL Image或NumPy ndarray转换为张量，并自动将维度从[H, W, C]重排为[C, H, W]
+    ])
+    
+    # 应用转换
+    image_tensor = transform(image)
+    image_tensor = image_tensor.unsqueeze(0)  # 添加批次维度
+    return image_tensor
+
+img = load_transform_image(img_path)
+
+
+
+print(img)
+
+
+
+
+
+
+with torch.no_grad():
+    model.to(device)
+    model.eval()
+    output = model(img)
+
+
+
+
+
+
+
+#print("Predictions: \n", output)
+
+
+def load_image(image_path):
+    """加载图像并转换为PyTorch张量"""
+    # 加载图像
+    image = Image.open(image_path).convert('RGB')
+    
+    # 定义转换过程
+    transform = transforms.Compose([
+        transforms.ToTensor()
+    ])
+    
+    # 应用转换
+    image_tensor = transform(image)
+    return image_tensor
+
+# 加载并转换图像
+image_tensor = load_image(img_path)
+
+# 将张量数据转换为适合显示的格式
+
+image_display = (image_tensor.permute(1,2,0).detach().cpu().numpy() * 255).astype(np.uint8)
+
+
+
+#image = (images[0].permute(1,2,0).detach().cpu().numpy() * 255).astype(np.uint8)
+scores = output[0]['scores'].detach().cpu().numpy()
+
+high_scores_idxs = np.where(scores > 0.1)[0].tolist() # Indexes of boxes with scores > 0.7
+post_nms_idxs = torchvision.ops.nms(output[0]['boxes'][high_scores_idxs], output[0]['scores'][high_scores_idxs], 0.3).cpu().numpy() # Indexes of boxes left after applying NMS (iou_threshold=0.3)
+
+# Below, in output[0]['keypoints'][high_scores_idxs][post_nms_idxs] and output[0]['boxes'][high_scores_idxs][post_nms_idxs]
+# Firstly, we choose only those objects, which have score above predefined threshold. This is done with choosing elements with [high_scores_idxs] indexes
+# Secondly, we choose only those objects, which are left after NMS is applied. This is done with choosing elements with [post_nms_idxs] indexes
+
+keypoints = []
+for kps in output[0]['keypoints'][high_scores_idxs][post_nms_idxs].detach().cpu().numpy():
+    keypoints.append([list(map(int, kp[:2])) for kp in kps])
+
+bboxes = []
+for bbox in output[0]['boxes'][high_scores_idxs][post_nms_idxs].detach().cpu().numpy():
+    bboxes.append(list(map(int, bbox.tolist())))
+ 
+ 
+
+
+
+#img = (img.permute(1,2,0).numpy() * 255).astype(np.uint8)
+#print(img)
+    
+visualize(image_display, bboxes, keypoints)
+plt.show() 
+
+
+
+
+#用于网络预测图像很可能输入错误，色彩也是错误    

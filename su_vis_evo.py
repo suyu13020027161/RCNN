@@ -14,6 +14,14 @@ import transforms, utils, engine, train
 from utils import collate_fn
 from engine import train_one_epoch, evaluate
 
+
+import torchvision.transforms as transforms
+from PIL import Image
+import matplotlib.pyplot as plt
+
+
+
+
 def train_transform():
     return A.Compose([
         A.Sequential([
@@ -49,23 +57,13 @@ class ClassDataset(Dataset):
             bboxes_labels_original = ['Glue tube' for _ in bboxes_original]            
 
         if self.transform:   
-            # Converting keypoints from [x,y,visibility]-format to [x, y]-format + Flattening nested list of keypoints            
-            # For example, if we have the following list of keypoints for three objects (each object has two keypoints):
-            # [[obj1_kp1, obj1_kp2], [obj2_kp1, obj2_kp2], [obj3_kp1, obj3_kp2]], where each keypoint is in [x, y]-format            
-            # Then we need to convert it to the following list:
-            # [obj1_kp1, obj1_kp2, obj2_kp1, obj2_kp2, obj3_kp1, obj3_kp2]
             keypoints_original_flattened = [el[0:2] for kp in keypoints_original for el in kp]
             
             # Apply augmentations
             transformed = self.transform(image=img_original, bboxes=bboxes_original, bboxes_labels=bboxes_labels_original, keypoints=keypoints_original_flattened)
             img = transformed['image']
             bboxes = transformed['bboxes']
-            
-            # Unflattening list transformed['keypoints']
-            # For example, if we have the following list of keypoints for three objects (each object has two keypoints):
-            # [obj1_kp1, obj1_kp2, obj2_kp1, obj2_kp2, obj3_kp1, obj3_kp2], where each keypoint is in [x, y]-format
-            # Then we need to convert it to the following list:
-            # [[obj1_kp1, obj1_kp2], [obj2_kp1, obj2_kp2], [obj3_kp1, obj3_kp2]]
+
             keypoints_transformed_unflattened = np.reshape(np.array(transformed['keypoints']), (-1,2,2)).tolist()
 
             # Converting transformed keypoints from [x, y]-format to [x,y,visibility]-format by appending original visibilities to transformed coordinates of keypoints
@@ -167,7 +165,7 @@ for kps in batch[3][0]['keypoints'].detach().cpu().numpy().astype(np.int32).toli
 
 visualize(image, bboxes, keypoints, image_original, bboxes_original, keypoints_original)
 
-def get_model(num_keypoints, weights_path=None):
+def get_model(num_keypoints, weights_path=True):
     
     anchor_generator = AnchorGenerator(sizes=(32, 64, 128, 256, 512), aspect_ratios=(0.25, 0.5, 0.75, 1.0, 2.0, 3.0, 4.0))
     model = torchvision.models.detection.keypointrcnn_resnet50_fpn(pretrained=False,
@@ -185,13 +183,11 @@ def get_model(num_keypoints, weights_path=None):
 #device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')    
 device = torch.device('cpu')
 
-KEYPOINTS_FOLDER_TRAIN = '/home/ysu/keypoint_rcnn_training_pytorch-main/mis/train'
+
 KEYPOINTS_FOLDER_TEST = '/home/ysu/keypoint_rcnn_training_pytorch-main/mis/test'
 
-dataset_train = ClassDataset(KEYPOINTS_FOLDER_TRAIN, transform=train_transform(), demo=False)
-dataset_test = ClassDataset(KEYPOINTS_FOLDER_TEST, transform=None, demo=False)
 
-data_loader_train = DataLoader(dataset_train, batch_size=3, shuffle=True, collate_fn=collate_fn)
+dataset_test = ClassDataset(KEYPOINTS_FOLDER_TEST, transform=None, demo=False)
 data_loader_test = DataLoader(dataset_test, batch_size=1, shuffle=False, collate_fn=collate_fn)
 
 model = get_model(num_keypoints = 2)
@@ -200,18 +196,8 @@ model.to(device)
 params = [p for p in model.parameters() if p.requires_grad]
 optimizer = torch.optim.SGD(params, lr=0.001, momentum=0.9, weight_decay=0.0005)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.3)
-num_epochs = 5
 
 
-'''
-for epoch in range(num_epochs):
-    train_one_epoch(model, optimizer, data_loader_train, device, epoch, print_freq=1000)
-    lr_scheduler.step()
-    evaluate(model, data_loader_test, device)
-    
-# Save model weights after training
-torch.save(model.state_dict(), '/home/ysu/keypoint_rcnn_training_pytorch-main/keypointsrcnn_weights.pth')
-'''
 
 
 
@@ -228,7 +214,12 @@ with torch.no_grad():
 
 #print("Predictions: \n", output)
 
-image = (images[0].permute(1,2,0).detach().cpu().numpy() * 255).astype(np.uint8)
+
+
+
+
+
+#image = (images[0].permute(1,2,0).detach().cpu().numpy() * 255).astype(np.uint8)
 scores = output[0]['scores'].detach().cpu().numpy()
 
 high_scores_idxs = np.where(scores > 0.7)[0].tolist() # Indexes of boxes with scores > 0.7
